@@ -1,0 +1,138 @@
+<html>
+<head>
+<title>Video Test</title>
+</head>
+<body>
+
+<video id="video" width="1280" height="720" src="test.mp4"></video><br>
+<canvas id="canvas" width="240" height="37"></canvas><br>
+<canvas id="canvas2" width="240" height="37"></canvas><br>
+<img id="digits" src="digits.png" /><br>
+<span id="span"></span>
+
+<script>
+
+function $(id)
+{
+	return document.getElementById(id);
+}
+
+function getImageData(img)
+{
+	var canvas = document.createElement("canvas");
+	canvas.width = img.width;
+	canvas.height = img.height;
+	var ctx = canvas.getContext("2d");
+	ctx.drawImage(img, 0, 0);
+	var data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+	return data;
+}
+
+var video = $("video");
+var digits = getImageData($("digits"));
+var canvas = $("canvas");
+var canvas2 = $("canvas2");
+var ctx = canvas.getContext("2d");
+var ctx2 = canvas2.getContext("2d");
+
+function matchDigit(img, imgBaseIdx, lineStride, letterWidth, height, num)
+{
+	var digitBaseIdx = (letterWidth * num) * 4;
+	var digitLineStride = digits.width * 4;
+	var score = 0;
+	for (var y=0; y<height; ++y) {
+		var imgIdx = imgBaseIdx;
+		var digitIdx = digitBaseIdx;
+		for (var x=0; x<letterWidth; ++x) {
+			var digitR = digits.data[digitIdx + 0];
+			var digitG = digits.data[digitIdx + 1];
+			var digitB = digits.data[digitIdx + 2];
+			// green mask
+			if (digitG == digitR && digitG == digitB) {
+				var imgR = img.data[imgIdx + 0];
+				var imgG = img.data[imgIdx + 1];
+				var imgB = img.data[imgIdx + 2];
+				var diffR = (digitR - imgR);
+				var diffG = (digitG - imgG);
+				var diffB = (digitB - imgB);
+				score += diffR * diffR;
+				score += diffG * diffG;
+				score += diffB * diffB;
+			}
+			imgIdx += 4;
+			digitIdx += 4;
+		}
+		digitBaseIdx += digitLineStride;
+		imgBaseIdx += lineStride;
+	}
+	return score;
+}
+
+function matchLetter(img, imgBaseIdx, lineStride, letterWidth, height)
+{
+	var minScore = 1000000000;
+	var minIdx = 0;
+	for (var i=0; i<10; ++i) {
+		var score = matchDigit(img, imgBaseIdx, lineStride, letterWidth, height, i);
+		if (score < minScore) {
+			minScore = score;
+			minIdx = i;
+		}
+	}
+	return minIdx;
+}
+
+video.addEventListener("timeupdate", function(e) {
+	var width = 240;
+	var height = 37;
+	ctx.drawImage(
+		video,
+		1030, 16, width, height,
+		0, 0, width, height);
+	var basePos = 77;
+	var offsetPositions = [
+		0,
+		23,
+		54,
+		75,
+		106,
+		128,
+	];
+	var src = ctx.getImageData(0, 0, width, height);
+	var dst = ctx2.createImageData(width, height);
+	
+	var letterWidth = 24;
+	var lineStride = width * 4;
+	var indexes = [];
+	for (var i=0; i<offsetPositions.length; ++i) {
+//	for (var i=2; i<3; ++i) {
+		var offset = offsetPositions[i];
+		var srcBaseIdx = (basePos + offset) * 4;
+		var initialDstBaseIdx = (i * letterWidth) * 4;
+		var dstBaseIdx = initialDstBaseIdx;
+		for (var y=0; y<height; ++y) {
+			var srcIdx = srcBaseIdx;
+			var dstIdx = dstBaseIdx;
+			for (var x=0; x<letterWidth; ++x) {
+				dst.data[dstIdx+0] = src.data[srcIdx+0];
+				dst.data[dstIdx+1] = src.data[srcIdx+1];
+				dst.data[dstIdx+2] = src.data[srcIdx+2];
+				dst.data[dstIdx+3] = src.data[srcIdx+3];
+				srcIdx += 4;
+				dstIdx += 4;
+			}
+			srcBaseIdx += lineStride;
+			dstBaseIdx += lineStride;
+		}
+		var letIdx = matchLetter(dst, initialDstBaseIdx, lineStride, letterWidth, height);
+		indexes.push(letIdx);
+	}
+	ctx2.putImageData(dst, 0, 0);
+	
+	$("span").textContent = indexes.join("");
+	
+});
+
+</script>
+</body>
+</html>
