@@ -11,6 +11,10 @@
 <select id="select">
 	<option></option>
 </select>
+<select id="select_interpolation">
+	<option>Linear</option>
+	<option>Spline</option>
+</select>
 <br>
 <canvas id="canvas" width="1280" height="720" onContextMenu="return false;"></canvas><br>
 <input type="range" id="range" style="width:95%;"><br>
@@ -70,6 +74,7 @@ document.body.onload = function() {
 	var canvas = $("canvas");
 	var ctx = canvas.getContext("2d");
 	var select = $("select");
+	var select_interpolation = $("select_interpolation");
 	var range = $("range");
 	
 	var keyFrames = [];
@@ -127,10 +132,12 @@ document.body.onload = function() {
 		var frames = [];
 		var time = video.currentTime;
 		var frame = findFrame(time);
+		var interpolationType = select_interpolation.selectedIndex;
 		if (frame) {
 			frames.push(frame);
 		}else {
 			ctx.globalAlpha = 0.6;
+			
 			for (var i=0; i<keyFrames.length; ++i) {
 				var frame = keyFrames[i];
 				if (frame.time > time) {
@@ -138,12 +145,16 @@ document.body.onload = function() {
 					if (i == 0) {
 						break;
 					}else {
-						if (i+1 < keyFrames.length) {
-							frames.push(keyFrames[i+1]);
-						}
-						frames.unshift(keyFrames[i-1]);
-						if (i > 1) {
-							frames.unshift(keyFrames[i-2]);
+						if (interpolationType == 0) {
+							frames.unshift(keyFrames[i-1]);
+						}else {
+							if (i+1 < keyFrames.length) {
+								frames.push(keyFrames[i+1]);
+							}
+							frames.unshift(keyFrames[i-1]);
+							if (i > 1) {
+								frames.unshift(keyFrames[i-2]);
+							}
 						}
 					}
 					break;
@@ -163,6 +174,7 @@ document.body.onload = function() {
 		var idx = 0;
 		var offset = 0;
 		var frame0, frame1;
+		var weight0, weight1;
 		switch (frames.length) {
 		case 2:
 			frame0 = frames[0];
@@ -187,7 +199,10 @@ document.body.onload = function() {
 		}
 		if (frame0) {
 			var total = frame1.time - frame0.time;
-			idx = 25 * offset + Math.floor(25 * (time - frame0.time) / total);
+			var ratio = (time - frame0.time) / total;
+			weight1 = ratio;
+			weight0 = 1.0 - weight1;
+			idx = 25 * offset + Math.floor(25 * ratio);
 		}
 		for (var i=0; i<minLineLen; ++i) {
 			var xys = [];
@@ -211,17 +226,26 @@ document.body.onload = function() {
 					x = pt.x;
 					y = pt.y;
 				}else {
-					var xys2 = [];
-					for (var k=0; k<frames.length; ++k) {
-						var frame = frames[k];
-						var line = frame.lines[i];
-						var points = line.points;
-						var pt = points[j];
-						xys2.push(pt.x, pt.y);
+					if (interpolationType == 1) {
+						var xys2 = [];
+						for (var k=0; k<frames.length; ++k) {
+							var frame = frames[k];
+							var line = frame.lines[i];
+							var points = line.points;
+							var pt = points[j];
+							xys2.push(pt.x, pt.y);
+						}
+						var pts = getCurvePoints(xys2, 0.5);
+						x = pts[idx * 2];
+						y = pts[idx * 2 + 1];
+					}else {
+						var frame0 = frames[0];
+						var frame1 = frames[1];
+						var pt0 = frame0.lines[i].points[j];
+						var pt1 = frame1.lines[i].points[j];
+						x = pt0.x * weight0 + pt1.x * weight1;
+						y = pt0.y * weight0 + pt1.y * weight1;
 					}
-					var pts = getCurvePoints(xys2);
-					x = pts[idx * 2];
-					y = pts[idx * 2 + 1];
 				}
 				xys.push(x, y);
 				ctx.beginPath();
